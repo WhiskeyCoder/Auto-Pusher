@@ -15,21 +15,25 @@
 import os
 import subprocess
 import time
-from datetime import datetime
 import sys
+import requests
+from datetime import datetime
 
 # === CONFIG ===
-PROJECT_DIR = r"ENTER THE FULL LOCATION OF THE FOLDER"
 USERNAME = "GITEA USERNAME"
 TOKEN = "GITA TOKEN"  # 🔐 Gitea token http://192.168.XXX.XXX:PORT/user/settings/applications
 GITEA_HOST = "192.168.XXX.XXX:PORT"
-REPO_PATH = "USERNAME/PROJECT_NAME"
-
-REMOTE_URL = f"http://{USERNAME}:{TOKEN}@{GITEA_HOST}/{REPO_PATH}"
 BRANCH = "main"
-COMMIT_MESSAGE = "Auto-commit: changes detected"
-INITIAL_COMMIT_MESSAGE = "Initial auto-commit on startup"
 SLEEP_INTERVAL = 300  # 5 minutes
+INITIAL_COMMIT_MESSAGE = "Initial auto-commit on startup"
+COMMIT_MESSAGE = "Auto-commit: changes detected"
+
+# === DYNAMIC PROJECT DIR & NAME ===
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_NAME = os.path.basename(SCRIPT_DIR)
+PROJECT_DIR = SCRIPT_DIR
+REPO_PATH = f"{USERNAME}/{PROJECT_NAME}"
+REMOTE_URL = f"http://{USERNAME}:{TOKEN}@{GITEA_HOST}/{REPO_PATH}"
 
 # === ASCII HEADER ===
 def print_banner():
@@ -46,6 +50,37 @@ d88P     888  "Y88888  "Y888 "Y88P"         888         "Y88888  88888P' 888  88
                💻 Auto-Pusher for Gitea 💻
     """
     print(banner)
+
+# === GITEA API: Create Repo if Missing ===
+def create_gitea_repo():
+    api_url = f"http://{GITEA_HOST}/api/v1/user/repos"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"token {TOKEN}"
+    }
+
+    check_url = f"http://{GITEA_HOST}/api/v1/repos/{REPO_PATH}"
+    check = requests.get(check_url, headers=headers)
+
+    if check.status_code == 200:
+        print(f"[{datetime.now()}] 📦 Repo '{REPO_PATH}' already exists on Gitea.")
+        return
+
+    print(f"[{datetime.now()}] 🚧 Repo not found. Creating repo '{REPO_PATH}'...")
+    payload = {
+        "name": PROJECT_NAME,
+        "private": True,
+        "auto_init": False,
+        "default_branch": BRANCH
+    }
+
+    response = requests.post(api_url, json=payload, headers=headers)
+
+    if response.status_code == 201:
+        print(f"[{datetime.now()}] ✅ Successfully created private repo '{REPO_PATH}'.")
+    else:
+        print(f"[{datetime.now()}] ❌ Failed to create repo: {response.status_code} - {response.text}")
+        raise Exception("Could not create repo on Gitea")
 
 # === GIT HELPERS ===
 def run_git_command(cmd):
@@ -68,6 +103,9 @@ def is_git_repo():
 def remote_exists():
     return "origin" in run_git_command(["git", "remote"]).stdout
 
+def has_changes():
+    return bool(run_git_command(["git", "status", "--porcelain"]).stdout.strip())
+
 def show_loading_bar(duration=3):
     bar_length = 30
     print(f"[{datetime.now()}] ⏳ Pushing to remote...", end="\r")
@@ -79,7 +117,15 @@ def show_loading_bar(duration=3):
         time.sleep(duration / bar_length)
     print("")
 
-# === CORE GIT FLOW ===
+def commit_and_push(message=COMMIT_MESSAGE):
+    print(f"[{datetime.now()}] 🔧 Committing changes...")
+    start = time.time()
+    run_git_command(["git", "add", "."])
+    run_git_command(["git", "commit", "-m", message])
+    show_loading_bar(2.5)
+    run_git_command(["git", "push", "origin", BRANCH])
+    print(f"[{datetime.now()}] ✅ Commit pushed in {round(time.time() - start, 2)}s.")
+
 def setup_repo_and_push():
     print(f"[{datetime.now()}] 🧪 Initializing new Git repo...")
     run_git_command(["git", "init"])
@@ -88,67 +134,52 @@ def setup_repo_and_push():
     run_git_command(["git", "commit", "-m", INITIAL_COMMIT_MESSAGE])
     run_git_command(["git", "remote", "add", "origin", REMOTE_URL])
     run_git_command(["git", "push", "-u", "origin", BRANCH])
-    print(f"[{datetime.now()}] ✅ Repo initialized and pushed.")
+    print(f"[{datetime.now()}] 🚀 Initial push complete.")
 
 def setup_remote():
-    print(f"[{datetime.now()}] 🚀 Setting up remote origin...")
+    print(f"[{datetime.now()}] 🔌 Setting up remote origin...")
     if not remote_exists():
         run_git_command(["git", "remote", "add", "origin", REMOTE_URL])
     run_git_command(["git", "branch", "-M", BRANCH])
     run_git_command(["git", "add", "."])
     run_git_command(["git", "commit", "-m", INITIAL_COMMIT_MESSAGE])
     run_git_command(["git", "push", "-u", "origin", BRANCH])
-    print(f"[{datetime.now()}] ✅ Remote setup complete.")
+    print(f"[{datetime.now()}] 🌐 Remote linked and initial push done.")
 
-def has_changes():
-    return bool(run_git_command(["git", "status", "--porcelain"]).stdout.strip())
-
-def commit_and_push(message=COMMIT_MESSAGE):
-    print(f"[{datetime.now()}] Changes detected. Committing...")
-    start = time.time()
-    run_git_command(["git", "add", "."])
-    run_git_command(["git", "commit", "-m", message])
-    show_loading_bar(2.5)
-    run_git_command(["git", "push", "origin", BRANCH])
-    duration = round(time.time() - start, 2)
-    print(f"[{datetime.now()}] ✅ Commit pushed. Took {duration}s.")
-
-def log_no_changes():
-    print(f"[{datetime.now()}] No changes detected.")
-
-# === MAIN LOOP ===
+# === MAIN ===
 if __name__ == "__main__":
     print_banner()
-    print("💫 Auto Git Pusher started. Watching for changes...")
+    print(f"[{datetime.now()}] 💫 Auto Git Pusher started for: {PROJECT_DIR}")
 
-    if not is_git_repo():
-        setup_repo_and_push()
-    elif not remote_exists():
-        setup_remote()
-    else:
-        log = run_git_command(["git", "log"])
-        if not log.stdout.strip():
-            print(f"[{datetime.now()}] 📦 No commits found. Trying initial commit...")
-            run_git_command(["git", "add", "."])
-            status = run_git_command(["git", "status", "--short"])
-            if status.stdout.strip():
-                print(f"[{datetime.now()}] 📋 {len(status.stdout.strip().splitlines())} file(s) staged for commit.")
-                run_git_command(["git", "commit", "-m", INITIAL_COMMIT_MESSAGE])
-                run_git_command(["git", "push", "-u", "origin", BRANCH])
-                print(f"[{datetime.now()}] ✅ First commit done.")
-            else:
-                print(f"[{datetime.now()}] ⚠️ Nothing to commit even after git add.")
-        elif has_changes():
-            commit_and_push(INITIAL_COMMIT_MESSAGE)
+    try:
+        create_gitea_repo()
+
+        if not is_git_repo():
+            setup_repo_and_push()
+        elif not remote_exists():
+            setup_remote()
         else:
-            print(f"[{datetime.now()}] 🧼 Clean on startup, nothing to commit.")
+            log = run_git_command(["git", "log"])
+            if not log.stdout.strip():
+                print(f"[{datetime.now()}] 🧾 No commits found. Doing initial commit...")
+                run_git_command(["git", "add", "."])
+                status = run_git_command(["git", "status", "--short"])
+                if status.stdout.strip():
+                    run_git_command(["git", "commit", "-m", INITIAL_COMMIT_MESSAGE])
+                    run_git_command(["git", "push", "-u", "origin", BRANCH])
+                else:
+                    print(f"[{datetime.now()}] ⚠️ Nothing to commit after add.")
+            elif has_changes():
+                commit_and_push(INITIAL_COMMIT_MESSAGE)
+            else:
+                print(f"[{datetime.now()}] 🧼 Clean start — nothing to commit.")
 
-    while True:
-        try:
+        while True:
             if has_changes():
                 commit_and_push()
             else:
-                log_no_changes()
-        except Exception as e:
-            print(f"[{datetime.now()}] ❌ Error: {e}")
-        time.sleep(SLEEP_INTERVAL)
+                print(f"[{datetime.now()}] 💤 No changes. Sleeping...")
+            time.sleep(SLEEP_INTERVAL)
+
+    except Exception as e:
+        print(f"[{datetime.now()}] ❌ Fatal error: {e}")
