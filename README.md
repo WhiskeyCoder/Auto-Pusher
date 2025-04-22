@@ -31,7 +31,7 @@ Log 1:
 >   
 > - Automatically Detects current git repos, if no repo exsits it automatically creates one in that folder name and pushes
 >   
-> - Can now be Dropped into any folder with the creds, hit run and it will create a privaterepo for that folder
+> - Can now be Dropped into any folder with the creds, hit run and it will create a private repo for that folder
 > 
 
 
