@@ -24,6 +24,15 @@ A fully-automated, zero-click Git auto-committing and pushing system — perfect
 - 🌈 ASCII banners, progress bars, and sexy logging
 - 🧾 Self-hosted Git support (Gitea, GitLab, etc.)
 
+
+### 💻 ChangeLog:
+Log 1:
+> - Automatically Detects folder its in
+> - Automatically Detects current git repos, if no repo exsits it automatically creates one in that folder name and pushes
+> - Can now be Dropped into any folder with the details run and it will create a repo for that folder
+
+
+
 ### 📋 Requirements
 
 - Python 3.8+
