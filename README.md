@@ -14,6 +14,7 @@ d88P     888  "Y88888  "Y888 "Y88P"         888         "Y88888  88888P' 888  88
 # 🧠 Auto-Pusher for Gitea
 
 A fully-automated, zero-click Git auto-committing and pushing system — perfect for homelabbers, lone-wolf devs, and anyone working outside bloated IDEs.
+I wrote this because i kept forgeting version control so..... i setup gitea and this script to handle version contorl for me
 
 ### 💻 Features
 
